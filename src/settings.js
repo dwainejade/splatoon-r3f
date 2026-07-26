@@ -64,24 +64,24 @@ export const WEAPONS = {
     // --- Cadence and cost. Continuous automatic fire: one sphere of ink per
     // tick, ~13 a second for as long as the trigger is held.
     fireInterval: 0.15,   // s between shots
-    inkCost: 1.5,          // ink per shot, against INK.capacity
+    inkCost: 4.5,          // ink per shot, against INK.capacity
 
     // --- Footprint on impact. This is the coverage radius where the paint
     // lands: 0.68 paints a circle ~1.36m across. Ink disperses in flight, so a
     // shot that travels further lands wider.
-    radius: 0.48,
+    radius: 0.68,
     radiusPerMetre: 0.18, // extra radius per metre flown
     maxRadius: 1.7,        // ceiling on the above
     // Grazing hits smear along the direction of travel instead of stamping a
     // circle. This caps how far a shallow impact may elongate. 1 disables it.
-    maxStretch: 10.4,
+    maxStretch: 50.4,
 
     // --- The ball in flight.
     projectileRadiusScale: 0.25,  // ball radius relative to the splat it makes
     emergenceDistance: 1.6,       // m over which a fresh ball grows to full size
 
     // --- Charged burst, on hold-and-release of the right mouse button.
-    chargeSpeedScale: 0.55,   // + this fraction of muzzleSpeed at full charge
+    chargeSpeedScale: 1.1,   // + this fraction of muzzleSpeed at full charge
     chargeRadiusScale: 1.15,  // + this fraction of radius at full charge
     chargeInkCost: 18,
     chargeSpread: 0.008,
