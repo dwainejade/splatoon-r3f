@@ -1,0 +1,20 @@
+:root { font-family: Inter, ui-sans-serif, system-ui, sans-serif; color: #f5f4ff; background: #161a2b; }
+* { box-sizing: border-box; }
+body { margin: 0; overflow: hidden; }
+button { font: inherit; }
+main, canvas { display: block; width: 100vw; height: 100vh; }
+.hud { position: fixed; inset: 0; pointer-events: none; padding: 26px 30px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+.brand { font-size: 20px; color: #f5f4ff; text-shadow: 0 2px 8px #0008; }
+.brand span { color: #72e7ca; font-size: 11px; margin-left: 5px; }
+.timer { position: absolute; left: 50%; transform: translateX(-50%); top: 22px; font-size: 44px; font-variant-numeric: tabular-nums; text-shadow: 0 3px 10px #0009; }
+.score { position: absolute; right: 30px; top: 28px; text-align: right; text-shadow: 0 2px 8px #0008; }
+.score span, .ink span { display: block; color: #c1c5df; font-size: 11px; }
+.score strong { font-size: 28px; }
+.ink { position: absolute; left: 30px; bottom: 28px; }
+.ink div { width: 190px; height: 14px; margin-top: 7px; padding: 3px; background: #101321a8; border: 1px solid #a3a8c8; border-radius: 99px; }
+.ink i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #6d55ff, #b85dff); transition: width .1s linear; }
+.crosshair { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 27px; text-shadow: 0 1px 5px #000; pointer-events: none; }
+.start-card { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -45%); max-width: 390px; text-align: center; padding: 28px; background: #171b2de8; border: 1px solid #828ab6; border-radius: 16px; box-shadow: 0 14px 60px #0008; }
+.start-card p { margin: 0 0 18px; font-size: 18px; }
+.start-card button { border: 0; border-radius: 10px; padding: 13px 19px; background: #72e7ca; color: #102129; cursor: pointer; font-weight: 800; }
+.start-card small { display: block; margin-top: 18px; color: #c1c5df; line-height: 1.5; }
