@@ -52,7 +52,6 @@ export default function PaintableSurface({
     read: createMaskTarget(maskSize),
     write: createMaskTarget(maskSize),
     position: createPositionTarget(maskSize),
-    scratch: createPositionTarget(maskSize),
     reduce: new THREE.WebGLRenderTarget(REDUCE_SIZE, REDUCE_SIZE, {
       depthBuffer: false,
       stencilBuffer: false,
@@ -104,7 +103,6 @@ export default function PaintableSurface({
     targets.read.dispose()
     targets.write.dispose()
     targets.position.dispose()
-    targets.scratch.dispose()
     targets.reduce.dispose()
     material.dispose()
   }, [material, targets])
@@ -193,13 +191,19 @@ export default function PaintableSurface({
     // seam and padding texels have a position too. Static geometry, so once.
     const passes = getPasses()
     passes.renderPositionMap(gl, geometry, mesh.current.matrixWorld, targets.position)
+
+    // The dilation ping-pong needs a second target, but only for these two
+    // passes. Keeping it local means it is freed immediately and, more to the
+    // point, a re-run of this effect cannot render into a disposed one.
+    const scratch = createPositionTarget(maskSize)
     for (let pass = 0; pass < DILATE_PASSES; pass += 1) {
-      const from = pass % 2 === 0 ? targets.position : targets.scratch
-      const to = pass % 2 === 0 ? targets.scratch : targets.position
+      const from = pass % 2 === 0 ? targets.position : scratch
+      const to = pass % 2 === 0 ? scratch : targets.position
       passes.dilateMaterial.uniforms.uMap.value = from.texture
       passes.dilateMaterial.uniforms.uTexel.value.set(1 / maskSize, 1 / maskSize)
       passes.render(gl, passes.dilateMaterial, to, false)
     }
+    scratch.dispose()
 
     const record = { mesh: mesh.current, splat, shedFrom }
     // Hung off the mesh so a raycast hit resolves to its surface in one step.

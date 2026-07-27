@@ -145,8 +145,9 @@ export function getPasses() {
 }
 
 // Holds a world position per texel, so RGBA8 is nowhere near enough range.
-// Full float rather than half: the map is written once for static geometry, and
-// exact positions keep splat edges from shimmering across a face.
+// Full float specifically: RGBA16F is half the memory and precise enough, but
+// rendering into it loses the WebGL context on some drivers where RGBA32F is
+// fine. Verified by readback, so leave it alone without testing the swap.
 export function createPositionTarget(size) {
   return new THREE.WebGLRenderTarget(size, size, {
     depthBuffer: false,

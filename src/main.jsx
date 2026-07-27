@@ -10,10 +10,11 @@ import {
 } from "react";
 import { createRoot } from "react-dom/client";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { PointerLockControls, Sky, Stats } from "@react-three/drei";
+import { PointerLockControls, Stats } from "@react-three/drei";
 import * as THREE from "three";
 import InkDroplets from "./InkDroplets.jsx";
 import InkWeapon from "./InkWeapon.jsx";
+import Skybox from "./Skybox.jsx";
 import PaintableSurface from "./paint/PaintableSurface.jsx";
 import { createAtlasBoxGeometry } from "./paint/geometry.js";
 import {
@@ -195,7 +196,7 @@ function Arena({ onCoverage, onSpray, registerSurface }) {
   return (
     <>
       <Stats showPanel={0} className="stats" />
-      <Sky sunPosition={ARENA.lightDirection} />
+      <Skybox level={ARENA} />
       <ambientLight intensity={ARENA.ambientIntensity} />
       <directionalLight
         position={ARENA.lightDirection}
@@ -277,7 +278,9 @@ function World({
   );
   return (
     <Canvas camera={{ position: PLAYER.spawn, fov: PLAYER.fieldOfView }}>
-      <color attach="background" args={[ARENA.backgroundColor]} />
+      {!ARENA.skybox && (
+        <color attach="background" args={[ARENA.backgroundColor]} />
+      )}
       <fog attach="fog" args={[ARENA.fogColor, ARENA.fogNear, ARENA.fogFar]} />
       <FirstPersonMovement />
       <InkProjectiles ref={projectiles} />

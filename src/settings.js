@@ -20,18 +20,18 @@ export const RUN = {
 export const PLAYER = {
   moveSpeed: 7,          // m/s on the ground
   eyeHeight: 1.7,
-  fieldOfView: 60,       // vertical, degrees
+  fieldOfView: 50,       // vertical, degrees
   spawn: [0, 1.7, 15],
   // How far from the centre the player may walk, in metres. Keep inside
   // ARENA.floorSize / 2 or you can walk off the edge of the floor.
-  arenaLimit: 19,
+  arenaLimit: 20,
 }
 
 export const INK = {
   capacity: 100,
   // Refill rate. Fire rate costs WEAPONS.standard.inkCost every fireInterval,
   // so at the defaults spraying drains roughly 20/s against this 16.7/s refill.
-  rechargePerSecond: 16.7,
+  rechargePerSecond: 25.0,
 }
 
 // ---------------------------------------------------------------------------
@@ -130,41 +130,100 @@ export const PAINT = {
   shedLifetime: 4,       // s before a drop that hits nothing gives up
 
 
+  // Skyboxes are downsampled to at most this width before upload, so dropping
+  // an oversized .hdr into a level cannot blow the VRAM budget. Cost is
+  // width * height * 16 bytes: 2048 wide is 33MB, 4096 wide is 134MB — and the
+  // latter, on top of the paint masks, is enough to lose the WebGL context.
+  // A 2K source at 2048 is not resampled at all.
+  skyboxMaxWidth: 2048,
+
   // --- Mask resolution. Higher is crisper paint and more GPU memory; each
   // surface gets two masks at the size this implies, clamped to 256..1024.
   texelsPerMetre: 26,
 }
 
 // ---------------------------------------------------------------------------
-// Arena
+// Levels
+//
+// Each level is a self-contained arena: its own skybox, palette, layout, sun
+// and fog. Add an entry, point ACTIVE_LEVEL at it, and that is a new level.
+//
+// `skybox` is a path under public/ to an equirectangular .hdr. Set it to null
+// to fall back to the procedural gradient sky instead.
+//
+// A note on palette: ink is drawn over `floorColor`, and the renderer's ACES
+// tone mapping desaturates bright saturated colours. A pale floor and a bright
+// ink therefore converge and the paint stops reading. Keep a clear value gap
+// between `floorColor` and `PAINT.color` — a light floor wants a deep ink, a
+// dark floor wants a bright one.
 // ---------------------------------------------------------------------------
 
-export const ARENA = {
-  floorSize: 42,
-  floorColor: '#3d4460',
-  // Blocks alternate between these two.
-  blockColors: ['#47577d', '#6f577e'],
-  // [centreX, centreY, centreZ, width, height, depth] in metres. centreY is
-  // half the height if you want a block sitting on the floor.
-  blocks: [
-    [-11, 1.5, -8, 4, 3, 2],
-    [8, 2, -10, 3, 4, 3],
-    [-7, 1, 7, 5, 2, 2],
-    [10, 1, 8, 3, 2, 5],
-    [0, 3, 0, 3, 6, 3],
-    [-15, 2, 8, 2, 4, 2],
-  ],
+export const LEVELS = [
+  {
+    name: 'Dust Yard',
+    skybox: '/assets/sky/skybox_2k.hdr',
 
-  // Direction of the sun, also used to place the sky and to light the ink.
-  lightDirection: [10, 18, 8],
-  ambientIntensity: 0.45,
-  sunIntensity: 2.4,
+    floorSize: 42,
+    floorColor: '#e7e6bc',
+    // Blocks alternate between these two.
+    blockColors: ['#d0d6e5', '#b6abbd'],
+    // [centreX, centreY, centreZ, width, height, depth] in metres. centreY is
+    // half the height if you want a block sitting on the floor.
+    blocks: [
+      [-11, 1.5, -8, 4, 3, 2],
+      [8, 2, -10, 3, 4, 3],
+      [-7, 1, 7, 5, 2, 2],
+      [10, 1, 8, 3, 2, 5],
+      [0, 3, 0, 3, 6, 3],
+      [-15, 2, 8, 2, 4, 2],
+    ],
 
-  backgroundColor: '#161a2b',
-  fogColor: '#161a2b',
-  fogNear: 22,
-  fogFar: 56,
-}
+    // Direction of the sun, also used to place the fallback sky and light the ink.
+    lightDirection: [10, 20, 8],
+    ambientIntensity: 0.4,
+    sunIntensity: 2.2,
+
+    // Only used when `skybox` is null; an HDR paints its own background.
+    backgroundColor: '#161a2b',
+    // Fog should sit near the horizon colour of the skybox or the arena edge
+    // reads as a hard cut against it.
+    fogColor: '#dcd9c4',
+    fogNear: 26,
+    fogFar: 95,
+  },
+
+  {
+    name: 'Night Lot',
+    skybox: null,
+
+    floorSize: 42,
+    floorColor: '#3d4460',
+    blockColors: ['#47577d', '#6f577e'],
+    blocks: [
+      [-9, 2, -9, 5, 4, 5],
+      [9, 1.5, -9, 4, 3, 4],
+      [0, 3.5, 0, 4, 7, 4],
+      [-12, 1, 6, 6, 2, 3],
+      [11, 2.5, 7, 3, 5, 3],
+      [0, 1, 14, 8, 2, 2],
+    ],
+
+    lightDirection: [10, 18, 8],
+    ambientIntensity: 0.45,
+    sunIntensity: 2.4,
+
+    backgroundColor: '#161a2b',
+    fogColor: '#161a2b',
+    fogNear: 22,
+    fogFar: 56,
+  },
+]
+
+// Which level to load. Everything else reads through ARENA, so this is the only
+// line that has to change to switch arenas.
+export const ACTIVE_LEVEL = 0
+
+export const ARENA = LEVELS[ACTIVE_LEVEL]
 
 // ---------------------------------------------------------------------------
 // Scoring
