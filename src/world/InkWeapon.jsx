@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 
-import { PROJECTILE_CAPACITY } from './settings.js'
+import { PROJECTILE_CAPACITY } from '../settings.js'
 
 // Ink is a projectile, not a hitscan ray: it leaves the muzzle at the weapon's
 // speed, falls under the weapon's gravity, and each frame the segment it just

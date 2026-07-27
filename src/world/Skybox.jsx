@@ -3,7 +3,7 @@ import { useLoader, useThree } from "@react-three/fiber";
 import { Sky } from "@react-three/drei";
 import { RGBELoader } from "three-stdlib";
 import * as THREE from "three";
-import { PAINT } from "./settings.js";
+import { PAINT } from "../settings.js";
 
 // Per-level sky. A level either names an .hdr under public/ or gets the
 // procedural gradient instead.

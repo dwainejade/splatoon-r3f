@@ -1,8 +1,8 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
-import { projectileFragmentShader, projectileVertexShader } from './paint/shaders.js'
-import { ARENA, DROPLET_CAPACITY, PAINT } from './settings.js'
+import { projectileFragmentShader, projectileVertexShader } from '../paint/shaders.js'
+import { ARENA, DROPLET_CAPACITY, PAINT } from '../settings.js'
 
 // Airborne ink. Two things feed this pool and both behave the same once in the
 // air: drips that run off the bottom lip of a face, and splashes thrown up when
