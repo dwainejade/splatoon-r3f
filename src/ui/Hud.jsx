@@ -1,9 +1,9 @@
-import { INK } from '../settings.js'
+import { INK } from "../settings.js";
 
 function formatClock(seconds) {
-  const minutes = String(Math.floor(seconds / 60)).padStart(2, '0')
-  const remainder = String(seconds % 60).padStart(2, '0')
-  return `${minutes}:${remainder}`
+  const minutes = String(Math.floor(seconds / 60)).padStart(2, "0");
+  const remainder = String(seconds % 60).padStart(2, "0");
+  return `${minutes}:${remainder}`;
 }
 
 // Presentational only — every value it shows is passed in.
@@ -36,5 +36,5 @@ export default function Hud({ remaining, painted, ink }) {
         +
       </div>
     </>
-  )
+  );
 }

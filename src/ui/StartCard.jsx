@@ -11,12 +11,14 @@ export default function StartCard({ finished, painted, onStart }) {
         <p>A first-person paint time attack.</p>
       )}
 
-      <button onClick={onStart}>{finished ? 'Run it again' : 'Start 3-minute run'}</button>
+      <button onClick={onStart}>
+        {finished ? "Run it again" : "Start 3-minute run"}
+      </button>
 
       <small>
-        Click the arena to look around · WASD to move · Hold left click to spray · Hold
-        right click for a burst
+        Click the arena to look around · WASD to move · Hold left click to spray
+        · Hold right click for a burst
       </small>
     </section>
-  )
+  );
 }
