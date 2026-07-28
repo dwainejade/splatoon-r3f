@@ -3,6 +3,7 @@ import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { analyzeCells, cellPointToWorld, resolveCells } from "./geometry.js";
 import {
+  createColorTarget,
   createMaskTarget,
   createPositionTarget,
   getPasses,
@@ -11,6 +12,7 @@ import {
 } from "./passes.js";
 import { surfaceFragmentShader, surfaceVertexShader } from "./shaders.js";
 import { PAINT, SCORING } from "../settings.js";
+import { useSkyReflection } from "../world/SkyReflection.jsx";
 
 const REDUCE_SIZE = 64;
 const REDUCE_TAPS = 8;
@@ -37,6 +39,7 @@ export default function PaintableSurface({
   registerSurface,
 }) {
   const { gl } = useThree();
+  const { texture: skyReflection } = useSkyReflection();
   const mesh = useRef();
   const pending = useRef([]);
   const pendingSheds = useRef([]);
@@ -52,6 +55,8 @@ export default function PaintableSurface({
     () => ({
       read: createMaskTarget(maskSize),
       write: createMaskTarget(maskSize),
+      colorRead: createColorTarget(maskSize),
+      colorWrite: createColorTarget(maskSize),
       position: createPositionTarget(maskSize),
       reduce: new THREE.WebGLRenderTarget(REDUCE_SIZE, REDUCE_SIZE, {
         depthBuffer: false,
@@ -78,41 +83,64 @@ export default function PaintableSurface({
           THREE.UniformsLib.fog,
           {
             paintMask: { value: null },
+            colorMask: { value: null },
             uMaskSize: { value: new THREE.Vector2(maskSize, maskSize) },
             uGrid: { value: new THREE.Vector2(gridX, gridY) },
             baseColor: { value: new THREE.Color(baseColor) },
-            inkColor: { value: new THREE.Color(inkColor) },
             uLightDirection: { value: new THREE.Vector3(...lightDirection) },
             uBulge: { value: PAINT.bulge },
             uSpecular: { value: PAINT.specular },
+            // Filled in once the skybox has decoded; levels without an HDR
+            // simply leave the strength at zero.
+            uSkyMap: { value: null },
+            uSkyStrength: { value: 0 },
           },
         ]),
         vertexShader: surfaceVertexShader,
         fragmentShader: surfaceFragmentShader,
         fog: true,
       }),
-    [baseColor, gridX, gridY, inkColor, lightDirection, maskSize],
+    [baseColor, gridX, gridY, lightDirection, maskSize],
   );
 
+  useEffect(() => {
+    material.uniforms.uSkyMap.value = skyReflection;
+    material.uniforms.uSkyStrength.value = skyReflection ? PAINT.reflection : 0;
+  }, [material, skyReflection]);
+
   // Both masks start empty; the flow pass ping-pongs between them from there.
+  // The colour masks are cleared to this surface's default ink colour instead
+  // of black — irrelevant until something is painted, but it keeps a stray
+  // read from ever showing pure black paint.
   useEffect(() => {
     const previousTarget = gl.getRenderTarget();
     const previousColor = gl.getClearColor(new THREE.Color());
     const previousAlpha = gl.getClearAlpha();
+
     gl.setClearColor(0x000000, 1);
     for (const target of [targets.read, targets.write]) {
       gl.setRenderTarget(target);
       gl.clear(true, false, false);
     }
+
+    gl.setClearColor(new THREE.Color(inkColor), 1);
+    for (const target of [targets.colorRead, targets.colorWrite]) {
+      gl.setRenderTarget(target);
+      gl.clear(true, false, false);
+    }
+
     gl.setRenderTarget(previousTarget);
     gl.setClearColor(previousColor, previousAlpha);
     material.uniforms.paintMask.value = targets.read.texture;
-  }, [gl, material, targets]);
+    material.uniforms.colorMask.value = targets.colorRead.texture;
+  }, [gl, inkColor, material, targets]);
 
   useEffect(
     () => () => {
       targets.read.dispose();
       targets.write.dispose();
+      targets.colorRead.dispose();
+      targets.colorWrite.dispose();
       targets.position.dispose();
       targets.reduce.dispose();
       material.dispose();
@@ -123,7 +151,7 @@ export default function PaintableSurface({
   // A splat is a sphere in the world; this only has to decide whether any of
   // this surface is inside it. Nothing here knows about faces or UVs, which is
   // exactly why ink carries over an edge onto the next face.
-  const splat = useCallback((center, radius, axis, stretch) => {
+  const splat = useCallback((center, radius, axis, stretch, color) => {
     const reach = radius * Math.max(1, stretch) * 1.25;
     if (
       center.distanceToSquared(bounds.current.center) >
@@ -140,13 +168,14 @@ export default function PaintableSurface({
       az: axis.z,
       radius,
       stretch,
+      color: color ?? inkColor,
     });
     return true;
-  }, []);
+  }, [inkColor]);
 
   // Only the surface actually hit runs this; it needs a UV to know which face
   // the ink landed on and therefore which way a run would travel.
-  const shedFrom = useCallback((uv, radius, direction) => {
+  const shedFrom = useCallback((uv, radius, direction, color) => {
     pendingSheds.current.push({
       u: uv.x,
       v: uv.y,
@@ -154,8 +183,9 @@ export default function PaintableSurface({
       dx: direction.x,
       dy: direction.y,
       dz: direction.z,
+      color: color ?? inkColor,
     });
-  }, []);
+  }, [inkColor]);
 
   // A run that reaches the bottom lip of a face does not stop there — it falls
   // off. Rather than reading the mask back to find ink at an edge, work out at
@@ -210,7 +240,7 @@ export default function PaintableSurface({
       // Clear of the face, so the drop does not immediately re-hit the wall it left.
       lipPoint.addScaledVector(cell.normal, 0.04);
       shedVelocity.set(0, -PAINT.shedFallSpeed, 0);
-      onSpray(lipPoint, PAINT.shedSplatRadius, toCreep / speed, shedVelocity);
+      onSpray(lipPoint, PAINT.shedSplatRadius, toCreep / speed, shedVelocity, shot.color);
     },
     [lipPoint, onSpray, shedVelocity],
   );
@@ -279,14 +309,28 @@ export default function PaintableSurface({
 
     while (pending.current.length > 0) {
       const shot = pending.current.pop();
+      // Shared between the two stamps so the colour splat lands with exactly
+      // the height splat's silhouette instead of its own random lobing.
+      const seed = Math.random();
+
       const uniforms = passes.stampMaterial.uniforms;
       uniforms.uPositionMap.value = targets.position.texture;
       uniforms.uCenter.value.set(shot.cx, shot.cy, shot.cz);
       uniforms.uAxis.value.set(shot.ax, shot.ay, shot.az);
       uniforms.uRadius.value = shot.radius;
       uniforms.uStretch.value = shot.stretch;
-      uniforms.uSeed.value = Math.random();
+      uniforms.uSeed.value = seed;
       passes.render(gl, passes.stampMaterial, targets.read, false);
+
+      const colorUniforms = passes.colorStampMaterial.uniforms;
+      colorUniforms.uPositionMap.value = targets.position.texture;
+      colorUniforms.uCenter.value.set(shot.cx, shot.cy, shot.cz);
+      colorUniforms.uAxis.value.set(shot.ax, shot.ay, shot.az);
+      colorUniforms.uRadius.value = shot.radius;
+      colorUniforms.uStretch.value = shot.stretch;
+      colorUniforms.uSeed.value = seed;
+      colorUniforms.uColor.value.set(shot.color);
+      passes.render(gl, passes.colorStampMaterial, targets.colorRead, false);
 
       wetUntil.current = now + PAINT.wetSeconds;
       scoreDirty.current = true;
@@ -320,10 +364,31 @@ export default function PaintableSurface({
       }
       passes.render(gl, passes.flowMaterial, targets.write, false);
 
+      // Colour flow reads the same pre-swap height mask the height flow just
+      // used, so "is this texel wet and taller than upstream" agrees between
+      // the two passes.
+      const colorUniforms = passes.colorFlowMaterial.uniforms;
+      colorUniforms.uColorMask.value = targets.colorRead.texture;
+      colorUniforms.uWetMask.value = targets.read.texture;
+      colorUniforms.uTexel.value.set(1 / maskSize, 1 / maskSize);
+      colorUniforms.uGrid.value.set(gridX, gridY);
+      colorUniforms.uDelta.value = delta;
+      for (let slot = 0; slot < MAX_ATLAS_CELLS; slot += 1) {
+        const cell = cells.current[slot];
+        colorUniforms.uFlow.value[slot].copy(cell ? cell.flow : { x: 0, y: 0 });
+      }
+      passes.render(gl, passes.colorFlowMaterial, targets.colorWrite, false);
+
       const swap = targets.read;
       targets.read = targets.write;
       targets.write = swap;
       material.uniforms.paintMask.value = targets.read.texture;
+
+      const colorSwap = targets.colorRead;
+      targets.colorRead = targets.colorWrite;
+      targets.colorWrite = colorSwap;
+      material.uniforms.colorMask.value = targets.colorRead.texture;
+
       scoreDirty.current = true;
     }
 

@@ -4,12 +4,12 @@ import {
   projectileFragmentShader,
   projectileVertexShader,
 } from "../paint/shaders.js";
-import { ARENA, PAINT, PROJECTILE_CAPACITY } from "../settings.js";
+import { ARENA, PROJECTILE_CAPACITY } from "../settings.js";
 
 // The balls of ink in flight, one instanced billboard each. Purely a renderer:
 // the weapon owns the simulation and hands it whatever is currently alive.
 const InkProjectiles = forwardRef(function InkProjectiles(_, ref) {
-  const { geometry, material, positions, velocities, radii } = useMemo(() => {
+  const { geometry, material, positions, velocities, radii, colors } = useMemo(() => {
     const quad = new THREE.PlaneGeometry(1, 1);
     const nextGeometry = new THREE.InstancedBufferGeometry();
     nextGeometry.setIndex(quad.getIndex().clone());
@@ -23,10 +23,12 @@ const InkProjectiles = forwardRef(function InkProjectiles(_, ref) {
     const nextPositions = new Float32Array(PROJECTILE_CAPACITY * 3);
     const nextVelocities = new Float32Array(PROJECTILE_CAPACITY * 3);
     const nextRadii = new Float32Array(PROJECTILE_CAPACITY);
+    const nextColors = new Float32Array(PROJECTILE_CAPACITY * 3);
     for (const [name, data, size] of [
       ["aPosition", nextPositions, 3],
       ["aVelocity", nextVelocities, 3],
       ["aRadius", nextRadii, 1],
+      ["aColor", nextColors, 3],
     ]) {
       const attribute = new THREE.InstancedBufferAttribute(data, size);
       attribute.setUsage(THREE.DynamicDrawUsage);
@@ -35,7 +37,6 @@ const InkProjectiles = forwardRef(function InkProjectiles(_, ref) {
 
     const nextMaterial = new THREE.ShaderMaterial({
       uniforms: {
-        uInkColor: { value: new THREE.Color(PAINT.color) },
         uLightDirection: { value: new THREE.Vector3(...ARENA.lightDirection) },
       },
       vertexShader: projectileVertexShader,
@@ -49,6 +50,7 @@ const InkProjectiles = forwardRef(function InkProjectiles(_, ref) {
       positions: nextPositions,
       velocities: nextVelocities,
       radii: nextRadii,
+      colors: nextColors,
     };
   }, []);
 
@@ -77,6 +79,9 @@ const InkProjectiles = forwardRef(function InkProjectiles(_, ref) {
           velocities[offset] = shot.velocity.x;
           velocities[offset + 1] = shot.velocity.y;
           velocities[offset + 2] = shot.velocity.z;
+          colors[offset] = shot.color.r;
+          colors[offset + 1] = shot.color.g;
+          colors[offset + 2] = shot.color.b;
           radii[count] = shot.visualRadius;
           count += 1;
         }
@@ -84,9 +89,10 @@ const InkProjectiles = forwardRef(function InkProjectiles(_, ref) {
         geometry.getAttribute("aPosition").needsUpdate = true;
         geometry.getAttribute("aVelocity").needsUpdate = true;
         geometry.getAttribute("aRadius").needsUpdate = true;
+        geometry.getAttribute("aColor").needsUpdate = true;
       },
     }),
-    [geometry, positions, radii, velocities],
+    [colors, geometry, positions, radii, velocities],
   );
 
   return <mesh geometry={geometry} material={material} frustumCulled={false} />;

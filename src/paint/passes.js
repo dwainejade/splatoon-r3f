@@ -1,6 +1,8 @@
 import * as THREE from 'three'
 import { PAINT } from '../settings.js'
 import {
+  colorFlowFragmentShader,
+  colorStampFragmentShader,
   dilateFragmentShader,
   flowFragmentShader,
   fullscreenVertexShader,
@@ -45,6 +47,35 @@ export function getPasses() {
     blendDst: THREE.OneFactor,
   })
 
+  // Paints the colour mask for the same splat. Kept as a separate draw rather
+  // than a second render target on the stamp pass because it blends
+  // differently: colour should replace, not max, or a colour with a low R/G/B
+  // value could never overwrite what is already there.
+  const colorStampMaterial = new THREE.ShaderMaterial({
+    uniforms: {
+      uPositionMap: { value: null },
+      uCenter: { value: new THREE.Vector3() },
+      uAxis: { value: new THREE.Vector3(1, 0, 0) },
+      uRadius: { value: 1 },
+      uStretch: { value: 1 },
+      uSeed: { value: 0 },
+      uLobeAmount: { value: PAINT.lobeAmount },
+      uColor: { value: new THREE.Color(PAINT.color) },
+    },
+    vertexShader: fullscreenVertexShader,
+    fragmentShader: colorStampFragmentShader,
+    depthTest: false,
+    depthWrite: false,
+    // Alpha-blend using the splat's own coverage as alpha: a soft edge fades
+    // the new colour into the old one instead of hard-cutting at the splat
+    // boundary, and a fresh coat over old ink still ends up fully the new
+    // colour where the splat is solid.
+    blending: THREE.CustomBlending,
+    blendEquation: THREE.AddEquation,
+    blendSrc: THREE.SrcAlphaFactor,
+    blendDst: THREE.OneMinusSrcAlphaFactor,
+  })
+
   const dilateMaterial = new THREE.ShaderMaterial({
     uniforms: {
       uMap: { value: null },
@@ -66,6 +97,24 @@ export function getPasses() {
     },
     vertexShader: fullscreenVertexShader,
     fragmentShader: flowFragmentShader,
+    depthTest: false,
+    depthWrite: false,
+  })
+
+  // Drags the colour mask downhill in lockstep with the height mask, sampling
+  // wetness from the height mask so a run carries the colour of the ink that
+  // is actually flowing rather than fading it back toward its own old colour.
+  const colorFlowMaterial = new THREE.ShaderMaterial({
+    uniforms: {
+      uColorMask: { value: null },
+      uWetMask: { value: null },
+      uTexel: { value: new THREE.Vector2() },
+      uGrid: { value: new THREE.Vector2(1, 1) },
+      uFlow: { value: Array.from({ length: MAX_ATLAS_CELLS }, () => new THREE.Vector2()) },
+      uDelta: { value: 0 },
+    },
+    vertexShader: fullscreenVertexShader,
+    fragmentShader: colorFlowFragmentShader,
     depthTest: false,
     depthWrite: false,
   })
@@ -101,9 +150,11 @@ export function getPasses() {
     scene,
     mesh,
     stampMaterial,
+    colorStampMaterial,
     dilateMaterial,
     positionMaterial,
     flowMaterial,
+    colorFlowMaterial,
     reduceMaterial,
     // The position pass is the one thing that cannot use the shared quad: it
     // has to rasterise the paintable mesh itself, unwrapped into its own UVs.
@@ -172,6 +223,12 @@ export function createMaskTarget(size) {
     wrapS: THREE.ClampToEdgeWrapping,
     wrapT: THREE.ClampToEdgeWrapping,
   })
+}
+
+// RGB of the ink actually sitting in each texel. Same layout as the height
+// mask so the two can be sampled with one UV and ping-ponged in lockstep.
+export function createColorTarget(size) {
+  return createMaskTarget(size)
 }
 
 // Mask resolution follows world size so a 42m floor and a 3m crate end up with

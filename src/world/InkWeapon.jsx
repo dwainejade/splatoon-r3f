@@ -25,6 +25,7 @@ export default function InkWeapon({
   const meshes = useMemo(() => [], []);
   const scratch = useMemo(
     () => ({
+      aim: new THREE.Vector3(),
       direction: new THREE.Vector3(),
       jitter: new THREE.Vector3(),
       previous: new THREE.Vector3(),
@@ -46,41 +47,58 @@ export default function InkWeapon({
         visualRadius: 0,
         distance: 0,
         age: 0,
+        color: new THREE.Color(),
       })),
     [],
   );
 
+  // One trigger pull launches the weapon's whole pattern: a single blob for the
+  // standard tool and the hose, a cone of pellets for the shotgun. Ink is
+  // charged once per pull rather than per pellet, so a scatter shot costs what
+  // the table says regardless of how many pellets it throws.
   const fire = useCallback(
     (charge, inkCost) => {
       if (!paintEnabled || ink < inkCost) return false;
-      const shot = projectiles.find((candidate) => !candidate.alive);
-      if (!shot) return false;
 
-      camera.getWorldDirection(scratch.direction);
+      // Every pellet jitters off the same aim, so the cone stays centred on the
+      // crosshair instead of the pattern itself drifting.
+      camera.getWorldDirection(scratch.aim);
       const spread = charge > 0 ? weapon.chargeSpread : weapon.spread;
-      scratch.jitter.set(
-        Math.random() - 0.5,
-        Math.random() - 0.5,
-        Math.random() - 0.5,
-      );
-      scratch.direction.addScaledVector(scratch.jitter, spread).normalize();
+      const pellets = weapon.pellets ?? 1;
+      let launched = 0;
 
-      shot.alive = true;
-      shot.position
-        .copy(camera.position)
-        .addScaledVector(scratch.direction, 0.55);
-      shot.position.y -= 0.17;
-      shot.velocity
-        .copy(scratch.direction)
-        .multiplyScalar(
-          weapon.muzzleSpeed * (1 + charge * weapon.chargeSpeedScale),
+      for (let pellet = 0; pellet < pellets; pellet += 1) {
+        const shot = projectiles.find((candidate) => !candidate.alive);
+        if (!shot) break; // pool exhausted; fire what we can
+
+        scratch.direction.copy(scratch.aim);
+        scratch.jitter.set(
+          Math.random() - 0.5,
+          Math.random() - 0.5,
+          Math.random() - 0.5,
         );
-      shot.radius = weapon.radius * (1 + charge * weapon.chargeRadiusScale);
-      shot.fullVisualRadius = shot.radius * weapon.projectileRadiusScale;
-      shot.visualRadius = 0;
-      shot.distance = 0;
-      shot.age = 0;
+        scratch.direction.addScaledVector(scratch.jitter, spread).normalize();
 
+        shot.alive = true;
+        shot.position
+          .copy(camera.position)
+          .addScaledVector(scratch.direction, 0.55);
+        shot.position.y -= 0.17;
+        shot.velocity
+          .copy(scratch.direction)
+          .multiplyScalar(
+            weapon.muzzleSpeed * (1 + charge * weapon.chargeSpeedScale),
+          );
+        shot.radius = weapon.radius * (1 + charge * weapon.chargeRadiusScale);
+        shot.fullVisualRadius = shot.radius * weapon.projectileRadiusScale;
+        shot.visualRadius = 0;
+        shot.distance = 0;
+        shot.age = 0;
+        shot.color.set(weapon.inkColor);
+        launched += 1;
+      }
+
+      if (launched === 0) return false;
       onInkUse(inkCost);
       return true;
     },
@@ -187,10 +205,10 @@ export default function InkWeapon({
             );
           }
 
-          paint(hit.point, radius, scratch.segment, stretch);
+          paint(hit.point, radius, scratch.segment, stretch, shot.color);
           const surface = hit.object.userData.paintSurface;
           if (surface && hit.uv)
-            surface.shedFrom(hit.uv, radius, scratch.segment);
+            surface.shedFrom(hit.uv, radius, scratch.segment, shot.color);
 
           shot.alive = false;
           continue;

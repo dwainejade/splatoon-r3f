@@ -4,6 +4,7 @@ import PaintableSurface from "../paint/PaintableSurface.jsx";
 import { createAtlasBoxGeometry } from "../paint/geometry.js";
 import { ARENA, PAINT } from "../settings.js";
 import Skybox from "./Skybox.jsx";
+import { SkyReflectionProvider } from "./SkyReflection.jsx";
 
 // Everything a level is made of: its sky, its light, and its paintable
 // surfaces. Remounted on each run (via a key) so every mask starts clean.
@@ -35,7 +36,7 @@ export default function Arena({
   );
 
   return (
-    <>
+    <SkyReflectionProvider>
       <Skybox level={level} />
       <ambientLight intensity={level.ambientIntensity} />
       <directionalLight
@@ -80,7 +81,7 @@ export default function Arena({
       ))}
 
       <GoalPad />
-    </>
+    </SkyReflectionProvider>
   );
 }
 

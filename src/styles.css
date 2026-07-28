@@ -8,9 +8,11 @@ main, canvas { display: block; width: 100vw; height: 100vh; }
 .brand span { color: #72e7ca; font-size: 11px; margin-left: 5px; }
 .timer { position: absolute; left: 50%; transform: translateX(-50%); top: 22px; font-size: 44px; font-variant-numeric: tabular-nums; text-shadow: 0 3px 10px #0009; }
 .score { position: absolute; right: 30px; top: 28px; text-align: right; text-shadow: 0 2px 8px #0008; }
-.score span, .ink span { display: block; color: #c1c5df; font-size: 11px; }
+.score span, .ink span, .weapon span { display: block; color: #c1c5df; font-size: 11px; }
 .score strong { font-size: 28px; }
 .ink { position: absolute; left: 30px; bottom: 28px; }
+.weapon { position: absolute; left: 30px; bottom: 74px; }
+.weapon strong { font-size: 17px; }
 .ink div { width: 190px; height: 14px; margin-top: 7px; padding: 3px; background: #101321a8; border: 1px solid #a3a8c8; border-radius: 99px; }
 .ink i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #6d55ff, #b85dff); transition: width .1s linear; }
 .crosshair { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 27px; text-shadow: 0 1px 5px #000; pointer-events: none; }

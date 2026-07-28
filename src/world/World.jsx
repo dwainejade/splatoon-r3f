@@ -1,7 +1,7 @@
 import { useCallback, useRef } from "react";
 import { Canvas } from "@react-three/fiber";
 import { Stats } from "@react-three/drei";
-import { ARENA, DEFAULT_WEAPON, PLAYER } from "../settings.js";
+import { ARENA, PLAYER } from "../settings.js";
 import Arena from "./Arena.jsx";
 import InkDroplets from "./InkDroplets.jsx";
 import InkProjectiles from "./InkProjectiles.jsx";
@@ -12,6 +12,7 @@ import Player from "./Player.jsx";
 // simulation components to each other and to the callbacks App passes down.
 export default function World({
   runId,
+  weapon,
   paintEnabled,
   ink,
   surfaces,
@@ -25,8 +26,8 @@ export default function World({
 
   const sync = useCallback((shots) => projectiles.current?.sync(shots), []);
   const spray = useCallback(
-    (position, radius, delay, velocity) =>
-      droplets.current?.spawn(position, radius, delay, velocity),
+    (position, radius, delay, velocity, color) =>
+      droplets.current?.spawn(position, radius, delay, velocity, color),
     [],
   );
 
@@ -44,7 +45,7 @@ export default function World({
       <InkProjectiles ref={projectiles} />
       <InkDroplets ref={droplets} surfaces={surfaces} paint={paint} />
       <InkWeapon
-        weapon={DEFAULT_WEAPON}
+        weapon={weapon}
         paintEnabled={paintEnabled}
         ink={ink}
         surfaces={surfaces}

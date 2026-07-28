@@ -1,4 +1,4 @@
-import { INK } from "../settings.js";
+import { INK, WEAPON_ORDER } from "../settings.js";
 
 function formatClock(seconds) {
   const minutes = String(Math.floor(seconds / 60)).padStart(2, "0");
@@ -7,7 +7,7 @@ function formatClock(seconds) {
 }
 
 // Presentational only — every value it shows is passed in.
-export default function Hud({ remaining, painted, ink }) {
+export default function Hud({ remaining, painted, ink, weapon, slot }) {
   return (
     <>
       <div className="hud">
@@ -22,6 +22,13 @@ export default function Hud({ remaining, painted, ink }) {
         <div className="score" aria-live="off">
           <span>Painted</span>
           <strong>{painted.toFixed(1)}%</strong>
+        </div>
+
+        <div className="weapon">
+          <span>
+            Weapon {slot + 1}/{WEAPON_ORDER.length}
+          </span>
+          <strong>{weapon.name}</strong>
         </div>
 
         <div className="ink">

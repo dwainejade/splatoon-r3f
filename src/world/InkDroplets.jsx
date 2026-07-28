@@ -33,11 +33,12 @@ const InkDroplets = forwardRef(function InkDroplets({ surfaces, paint }, ref) {
         radius: 0,
         position: new THREE.Vector3(),
         velocity: new THREE.Vector3(),
+        color: new THREE.Color(PAINT.color),
       })),
     [],
   );
 
-  const { geometry, material, positions, velocities, radii } = useMemo(() => {
+  const { geometry, material, positions, velocities, radii, colors } = useMemo(() => {
     const quad = new THREE.PlaneGeometry(1, 1);
     const nextGeometry = new THREE.InstancedBufferGeometry();
     nextGeometry.setIndex(quad.getIndex().clone());
@@ -50,10 +51,12 @@ const InkDroplets = forwardRef(function InkDroplets({ surfaces, paint }, ref) {
     const nextPositions = new Float32Array(DROPLET_CAPACITY * 3);
     const nextVelocities = new Float32Array(DROPLET_CAPACITY * 3);
     const nextRadii = new Float32Array(DROPLET_CAPACITY);
+    const nextColors = new Float32Array(DROPLET_CAPACITY * 3);
     for (const [name, data, size] of [
       ["aPosition", nextPositions, 3],
       ["aVelocity", nextVelocities, 3],
       ["aRadius", nextRadii, 1],
+      ["aColor", nextColors, 3],
     ]) {
       const attribute = new THREE.InstancedBufferAttribute(data, size);
       attribute.setUsage(THREE.DynamicDrawUsage);
@@ -61,7 +64,6 @@ const InkDroplets = forwardRef(function InkDroplets({ surfaces, paint }, ref) {
     }
     const nextMaterial = new THREE.ShaderMaterial({
       uniforms: {
-        uInkColor: { value: new THREE.Color(PAINT.color) },
         uLightDirection: { value: new THREE.Vector3(...ARENA.lightDirection) },
       },
       vertexShader: projectileVertexShader,
@@ -74,6 +76,7 @@ const InkDroplets = forwardRef(function InkDroplets({ surfaces, paint }, ref) {
       positions: nextPositions,
       velocities: nextVelocities,
       radii: nextRadii,
+      colors: nextColors,
     };
   }, []);
 
@@ -90,7 +93,7 @@ const InkDroplets = forwardRef(function InkDroplets({ surfaces, paint }, ref) {
     () => ({
       // delay is how long a run still needs to creep down a face before it
       // reaches the lip and lets go; splashes pass 0 and launch immediately.
-      spawn(position, radius, delay, velocity) {
+      spawn(position, radius, delay, velocity, color) {
         const drop = drops.find((candidate) => !candidate.alive);
         if (!drop) return;
         drop.alive = true;
@@ -100,6 +103,7 @@ const InkDroplets = forwardRef(function InkDroplets({ surfaces, paint }, ref) {
         drop.radius = radius;
         drop.position.copy(position);
         drop.velocity.copy(velocity);
+        if (color) drop.color.set(color);
       },
     }),
     [drops],
@@ -139,7 +143,7 @@ const InkDroplets = forwardRef(function InkDroplets({ surfaces, paint }, ref) {
         if (hit) {
           // Stretch of 1: a drop lands under its own weight, so it pools rather
           // than smearing the way a fired shot does.
-          paint(hit.point, drop.radius, scratch.segment, 1);
+          paint(hit.point, drop.radius, scratch.segment, 1, drop.color);
           drop.alive = false;
           continue;
         }
@@ -157,6 +161,9 @@ const InkDroplets = forwardRef(function InkDroplets({ surfaces, paint }, ref) {
       velocities[offset] = drop.velocity.x;
       velocities[offset + 1] = drop.velocity.y;
       velocities[offset + 2] = drop.velocity.z;
+      colors[offset] = drop.color.r;
+      colors[offset + 1] = drop.color.g;
+      colors[offset + 2] = drop.color.b;
       radii[count] = drop.radius * 0.5;
       count += 1;
     }
@@ -165,6 +172,7 @@ const InkDroplets = forwardRef(function InkDroplets({ surfaces, paint }, ref) {
     geometry.getAttribute("aPosition").needsUpdate = true;
     geometry.getAttribute("aVelocity").needsUpdate = true;
     geometry.getAttribute("aRadius").needsUpdate = true;
+    geometry.getAttribute("aColor").needsUpdate = true;
   });
 
   return <mesh geometry={geometry} material={material} frustumCulled={false} />;

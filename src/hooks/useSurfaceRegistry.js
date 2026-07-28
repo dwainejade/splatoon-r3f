@@ -18,9 +18,9 @@ export default function useSurfaceRegistry() {
   // A splat is a sphere in the world, so it is offered to every surface rather
   // than only the one that was hit. That is what carries ink around a corner
   // and onto whatever else is standing within reach of the impact.
-  const paint = useCallback((center, radius, axis, stretch) => {
+  const paint = useCallback((center, radius, axis, stretch, color) => {
     for (const surface of surfaces.current.values()) {
-      surface.splat(center, radius, axis, stretch)
+      surface.splat(center, radius, axis, stretch, color)
     }
   }, [])
 

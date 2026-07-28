@@ -3,6 +3,7 @@ import useCoverage from "./hooks/useCoverage.js";
 import useInkTank from "./hooks/useInkTank.js";
 import useRun from "./hooks/useRun.js";
 import useSurfaceRegistry from "./hooks/useSurfaceRegistry.js";
+import useWeapon from "./hooks/useWeapon.js";
 import Hud from "./ui/Hud.jsx";
 import StartCard from "./ui/StartCard.jsx";
 import World from "./world/World.jsx";
@@ -14,6 +15,7 @@ export default function App() {
   const tank = useInkTank(run.running);
   const coverage = useCoverage();
   const registry = useSurfaceRegistry();
+  const { weapon, slot } = useWeapon();
 
   // Order matters: everything is cleared before the arena remounts and its
   // surfaces register themselves again.
@@ -30,6 +32,7 @@ export default function App() {
     <main>
       <World
         runId={run.runId}
+        weapon={weapon}
         paintEnabled={paintEnabled}
         ink={tank.ink}
         surfaces={registry.surfaces}
@@ -43,6 +46,8 @@ export default function App() {
         remaining={run.remaining}
         painted={coverage.painted}
         ink={tank.ink}
+        weapon={weapon}
+        slot={slot}
       />
 
       {!run.running && (

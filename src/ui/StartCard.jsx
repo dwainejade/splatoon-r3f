@@ -17,7 +17,7 @@ export default function StartCard({ finished, painted, onStart }) {
 
       <small>
         Click the arena to look around · WASD to move · Hold left click to spray
-        · Hold right click for a burst
+        · Hold right click for a burst · 1-3 to swap weapon
       </small>
     </section>
   );

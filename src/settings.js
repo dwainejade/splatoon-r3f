@@ -54,6 +54,7 @@ export const INK = {
 export const WEAPONS = {
   standard: {
     name: 'Standard',
+    inkColor: '#3c6dff',
 
     // --- Ballistics. At these values a level shot from eye height reaches ~14m.
     muzzleSpeed: 60,       // m/s at the muzzle
@@ -86,7 +87,77 @@ export const WEAPONS = {
     chargeInkCost: 18,
     chargeSpread: 0.008,
   },
+
+  // Close-range wall tool. One pull throws a whole cone of small pellets, so it
+  // covers a broad patch instantly — but the heavy gravity means it is spent by
+  // about 9m and useless across the arena.
+  shotgun: {
+    name: 'Scatter',
+    inkColor: '#ff5c3c',
+
+    pellets: 30,            // projectiles per trigger pull
+    muzzleSpeed: 50,
+    gravity: 42,           // steep drop; range dies at roughly 9m
+    lifetime: .3,
+    spread: 0.25,          // wide cone — this is what makes it a shotgun
+
+    fireInterval: 0.5,     // pump action, not automatic
+    inkCost: 9,            // charged per pull, not per pellet
+
+    // Each pellet is small; the coverage comes from the pattern, not the splat.
+    radius: 0.72,
+    radiusPerMetre: 0.05,
+    maxRadius: 0.9,
+    maxStretch: 3.2,
+
+    // Nine balls leave the muzzle together, so each has to stay small and grow
+    // in over a decent distance or the blast whites out the screen.
+    projectileRadiusScale: 0.05,
+    emergenceDistance: 1.6,
+
+    chargeSpeedScale: 0.1,
+    chargeRadiusScale: 0.2,
+    chargeInkCost: 40,
+    chargeSpread: 0.18,
+  },
+
+  // Floor tool. A fast, heavy stream that arcs down within a few metres — you
+  // walk it across the ground like a hose. Enormously thirsty: it drains the
+  // tank in about seven seconds of continuous fire.
+  hose: {
+    name: 'Hose',
+    inkColor: '#3cffb0',
+
+    pellets: 2,
+    muzzleSpeed: 18,       // slow, so it falls quickly
+    gravity: 17,
+    lifetime: 1.2,
+    spread: 0.02,
+
+    fireInterval: 0.025,   // ~22/s, which reads as a continuous stream
+    inkCost: 1.2,          // ~31/s against a 16.7/s refill
+
+    radius: .8,
+    radiusPerMetre: 0.2,
+    maxRadius: 2.3,
+    // Shallow floor hits smear into a long band, which is the point of it.
+    maxStretch: 40.5,
+
+    // The hose is the worst case for this: slow rounds at 22/s means something
+    // is always near the muzzle. Small droplets growing in over a third of the
+    // weapon's range read as a stream instead of a wall of blobs.
+    projectileRadiusScale: 0.22,
+    emergenceDistance: 1.8,
+
+    chargeSpeedScale: 0.4,
+    chargeRadiusScale: 0.6,
+    chargeInkCost: 14,
+    chargeSpread: 0.02,
+  },
 }
+
+// Order of the weapon slots, selected with the number keys.
+export const WEAPON_ORDER = ['standard', 'shotgun', 'hose']
 
 export const DEFAULT_WEAPON = WEAPONS.standard
 
@@ -103,14 +174,25 @@ export const DROPLET_CAPACITY = 192
 // ---------------------------------------------------------------------------
 
 export const PAINT = {
-  color: '#ffb73c',
+  // Fallback ink colour: what an unpainted surface's colour mask clears to,
+  // and what droplets use before a weapon's own inkColor is known. Each
+  // weapon in WEAPONS carries its own inkColor for what actually gets stamped.
+  color: '#3c6dff',
 
   // --- Look
   // How strongly the ink's height gradient bends the surface normal. Higher
   // domes the paint; too high and splats read as balloons rather than liquid.
   bulge: 1.4,
-  // Multiplier on the specular highlight, which is what makes it read as wet.
+  // Multiplier on the specular highlight — the tight sun glint.
   specular: 1,
+  // How much of the sky the wet ink mirrors back. This is the broad, shaped
+  // reflection rather than the point highlight, and it is what actually makes
+  // paint look like a liquid surface rather than a coloured one.
+  reflection: 0.9,
+  // Width the skybox is blurred down to for that reflection. Small on purpose:
+  // downsampling this hard *is* the blur, and glossy paint wants a soft
+  // reflection, not a mirror. 96 costs about 70KB.
+  reflectionWidth: 96,
   // How far the splat outline wobbles with angle. 0 is a plain circle; past
   // ~0.4 splats start reading as starfish rather than poured blobs.
   lobeAmount: 0.26,
