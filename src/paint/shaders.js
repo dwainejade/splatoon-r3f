@@ -79,6 +79,45 @@ export const dilateFragmentShader = `
   }
 `
 
+// Shared by the height and colour stamp passes: both need the same splat
+// silhouette, so the shape lives once here rather than drifting out of sync
+// between two copies.
+const splatShape = `
+  ${noise2d}
+  // Returns the splat's coverage mask (0..1) at this texel, or a negative
+  // value if the texel is outside the splat entirely (caller should discard).
+  float splatMask(vec3 offset, vec3 axis, float radiusWorld, float stretch, float seed, float lobeAmount, out float radius, out float distance) {
+    float along = dot(offset, axis);
+    vec3 shaped = (offset - axis * along) + axis * (along / stretch);
+    distance = length(shaped) / radiusWorld;
+    if (distance > 1.25) return -1.0;
+
+    // Lobed boundary driven by the 3D direction out of the splat centre, so the
+    // outline stays continuous as it bends over an edge.
+    vec3 direction = normalize(shaped + vec3(1e-5));
+    float lobes = fbm(direction.xy * 2.4 + direction.z * 1.7 + seed * 17.0);
+    radius = 0.66 + (lobes - 0.5) * lobeAmount;
+    float body = smoothstep(radius, radius - 0.18, distance);
+
+    // Satellites sit on a sphere around the splat. The ones that happen to fall
+    // near the surface land; the rest simply miss, which is what real spatter
+    // does anyway.
+    float satellites = 0.0;
+    vec3 local = shaped / radiusWorld;
+    for (int drop = 0; drop < 6; drop += 1) {
+      float index = float(drop);
+      float spin = hash(vec2(seed, index)) * 6.2831853;
+      float tilt = hash(vec2(index, seed)) * 3.14159265;
+      float orbit = 0.72 + hash(vec2(seed + index, 7.3)) * 0.34;
+      float size = 0.07 + hash(vec2(seed + index, 3.1)) * 0.11;
+      vec3 satellite = vec3(cos(spin) * sin(tilt), sin(spin) * sin(tilt), cos(tilt)) * orbit;
+      satellites = max(satellites, smoothstep(size, size * 0.3, length(local - satellite)));
+    }
+
+    return max(body, satellites * 0.88);
+  }
+`
+
 // Pass 3: the splat itself. Runs over the whole mask, keeping only texels whose
 // world position falls inside the splat.
 export const stampFragmentShader = `
@@ -90,48 +129,46 @@ export const stampFragmentShader = `
   uniform float uSeed;
   uniform float uLobeAmount;
   varying vec2 vUv;
-  ${noise2d}
+  ${splatShape}
   void main() {
     vec4 encoded = texture2D(uPositionMap, vUv);
     if (encoded.a < 0.5) discard;
 
-    vec3 offset = encoded.xyz - uCenter;
-
-    // Stretch along the direction of travel so a grazing hit smears. Done in
-    // world space, so the smear carries on around a corner instead of stopping.
-    float along = dot(offset, uAxis);
-    vec3 shaped = (offset - uAxis * along) + uAxis * (along / uStretch);
-    float distance = length(shaped) / uRadius;
-    if (distance > 1.25) discard;
-
-    // Lobed boundary driven by the 3D direction out of the splat centre, so the
-    // outline stays continuous as it bends over an edge.
-    vec3 direction = normalize(shaped + vec3(1e-5));
-    float lobes = fbm(direction.xy * 2.4 + direction.z * 1.7 + uSeed * 17.0);
-    float radius = 0.66 + (lobes - 0.5) * uLobeAmount;
-    float body = smoothstep(radius, radius - 0.18, distance);
-
-    // Satellites sit on a sphere around the splat. The ones that happen to fall
-    // near the surface land; the rest simply miss, which is what real spatter
-    // does anyway.
-    float satellites = 0.0;
-    vec3 local = shaped / uRadius;
-    for (int drop = 0; drop < 6; drop += 1) {
-      float index = float(drop);
-      float spin = hash(vec2(uSeed, index)) * 6.2831853;
-      float tilt = hash(vec2(index, uSeed)) * 3.14159265;
-      float orbit = 0.72 + hash(vec2(uSeed + index, 7.3)) * 0.34;
-      float size = 0.07 + hash(vec2(uSeed + index, 3.1)) * 0.11;
-      vec3 satellite = vec3(cos(spin) * sin(tilt), sin(spin) * sin(tilt), cos(tilt)) * orbit;
-      satellites = max(satellites, smoothstep(size, size * 0.3, length(local - satellite)));
-    }
-
-    float mask = max(body, satellites * 0.88);
+    float radius, distance;
+    float mask = splatMask(encoded.xyz - uCenter, uAxis, uRadius, uStretch, uSeed, uLobeAmount, radius, distance);
     if (mask <= 0.002) discard;
 
     // Domed profile, peaking just under 1.0 so an 8-bit mask keeps the whole dome.
     float height = mask * (0.64 + 0.34 * smoothstep(radius, 0.0, distance));
     gl_FragColor = vec4(height, 1.0, 1.0, 1.0);
+  }
+`
+
+// Colour companion to the stamp pass above: same silhouette, but writes the
+// shot's colour with the splat's own coverage as alpha instead of writing
+// height. Blended src-alpha/one-minus-src-alpha (see passes.js) so it fades
+// the new colour in at the splat's soft edge and fully replaces old colour
+// where the splat is solid.
+export const colorStampFragmentShader = `
+  uniform sampler2D uPositionMap;
+  uniform vec3 uCenter;
+  uniform vec3 uAxis;
+  uniform float uRadius;
+  uniform float uStretch;
+  uniform float uSeed;
+  uniform float uLobeAmount;
+  uniform vec3 uColor;
+  varying vec2 vUv;
+  ${splatShape}
+  void main() {
+    vec4 encoded = texture2D(uPositionMap, vUv);
+    if (encoded.a < 0.5) discard;
+
+    float radius, distance;
+    float mask = splatMask(encoded.xyz - uCenter, uAxis, uRadius, uStretch, uSeed, uLobeAmount, radius, distance);
+    if (mask <= 0.002) discard;
+
+    gl_FragColor = vec4(uColor, mask);
   }
 `
 
@@ -191,6 +228,48 @@ export const flowFragmentShader = `
   }
 `
 
+// Colour companion to the flow pass above. Drags colour downhill in lockstep
+// with height: wherever the height mask just pulled ink in from upstream, this
+// pulls that upstream texel's colour in too, so a run reads as the colour of
+// ink that is actually flowing rather than a fixed colour underneath it.
+export const colorFlowFragmentShader = `
+  uniform sampler2D uColorMask;
+  uniform sampler2D uWetMask;
+  uniform vec2 uTexel;
+  uniform vec2 uGrid;
+  uniform vec2 uFlow[6];
+  uniform float uDelta;
+  varying vec2 vUv;
+
+  void main() {
+    vec2 cell = floor(vUv * uGrid);
+    vec2 cellMin = cell / uGrid + uTexel;
+    vec2 cellMax = (cell + 1.0) / uGrid - uTexel;
+    int cellIndex = int(cell.y * uGrid.x + cell.x);
+
+    vec2 flow = vec2(0.0);
+    for (int slot = 0; slot < 6; slot += 1) {
+      if (slot == cellIndex) flow = uFlow[slot];
+    }
+
+    vec3 color = texture2D(uColorMask, vUv).rgb;
+
+    vec2 upstream = clamp(vUv - flow * uDelta, cellMin, cellMax);
+    float upstreamHeight = texture2D(uWetMask, upstream).r;
+    float upstreamWet = texture2D(uWetMask, upstream).b;
+    vec3 upstreamColor = texture2D(uColorMask, upstream).rgb;
+
+    // Only take the upstream colour where that texel is both wet and actually
+    // the leading edge of a run (i.e. taller than what is here already) —
+    // matches the height pass's own condition for pulling ink downhill.
+    float here = texture2D(uWetMask, vUv).r;
+    float take = step(0.30, upstreamWet) * step(here, upstreamHeight * 0.985);
+    color = mix(color, upstreamColor, take);
+
+    gl_FragColor = vec4(color, 1.0);
+  }
+`
+
 // Subsamples the mask down to a small target so coverage can be read back
 // without stalling on a full-resolution readPixels.
 export const reduceFragmentShader = `
@@ -224,13 +303,15 @@ export const surfaceVertexShader = `
 
 export const surfaceFragmentShader = `
   uniform sampler2D paintMask;
+  uniform sampler2D colorMask;
   uniform vec2 uMaskSize;
   uniform vec2 uGrid;
   uniform vec3 baseColor;
-  uniform vec3 inkColor;
   uniform vec3 uLightDirection;
   uniform float uBulge;
   uniform float uSpecular;
+  uniform sampler2D uSkyMap;
+  uniform float uSkyStrength;
   varying vec2 vUv;
   varying vec3 vNormal;
   varying vec3 vWorldPosition;
@@ -294,6 +375,7 @@ export const surfaceFragmentShader = `
     float lambert = max(0.0, dot(normal, light));
     vec3 surface = baseColor * (0.52 + 0.48 * max(0.0, dot(geometryNormal, light)));
 
+    vec3 inkColor = texture2D(colorMask, vUv).rgb;
 
     // Ink stays close to flat and saturated; the shape comes from specular and
     // from the raymarch, not from diffuse shading.
@@ -305,12 +387,30 @@ export const surfaceFragmentShader = `
     float rim = ink * (1.0 - smoothstep(threshold + softness, threshold + softness + 0.18, height));
     color = mix(color, inkColor * 0.42, rim * 0.6);
 
+    // Tight sun glint.
     vec3 halfway = normalize(light + view);
     float gloss = mix(30.0, 160.0, wet);
     float specular = pow(max(0.0, dot(normal, halfway)), gloss) * mix(0.22, 1.15, wet) * ink * uSpecular;
-    // Broad sky reflection: the wide low-frequency lobe that makes it look wet.
-    float sheen = pow(max(0.0, dot(normal, normalize(view + vec3(0.0, 1.0, 0.0)))), 6.0) * ink * wet * 0.16;
-    color += specular + sheen;
+
+    // The sky itself, mirrored off the ink. Sampling the real skybox is what
+    // separates this from the fixed highlight it replaced: the reflection now
+    // moves and changes colour as you turn, which is the cue that reads as a
+    // wet surface rather than a shiny one.
+    vec3 mirrored = reflect(-view, normal);
+    vec2 skyUv = vec2(
+      atan(mirrored.z, mirrored.x) * 0.15915494 + 0.5,
+      asin(clamp(mirrored.y, -1.0, 1.0)) * 0.31830989 + 0.5
+    );
+    vec3 sky = texture2D(uSkyMap, skyUv).rgb;
+
+    // Schlick: paint is near-mirror at grazing angles and only weakly
+    // reflective head-on, which is what puts the shine on the far side of every
+    // splat and along its rim.
+    float facing = clamp(dot(normal, view), 0.0, 1.0);
+    float fresnel = 0.04 + 0.96 * pow(1.0 - facing, 5.0);
+    vec3 reflection = sky * fresnel * mix(0.35, 1.0, wet) * uSkyStrength * ink;
+
+    color += specular + reflection;
 
     gl_FragColor = vec4(color, 1.0);
     #include <tonemapping_fragment>
@@ -330,9 +430,11 @@ export const projectileVertexShader = `
   attribute vec3 aPosition;
   attribute vec3 aVelocity;
   attribute float aRadius;
+  attribute vec3 aColor;
   uniform vec3 uLightDirection;
   varying vec2 vUv;
   varying vec3 vViewLight;
+  varying vec3 vColor;
   void main() {
     vec4 viewPosition = viewMatrix * vec4(aPosition, 1.0);
     vec3 viewVelocity = (viewMatrix * vec4(aVelocity, 0.0)).xyz;
@@ -346,14 +448,15 @@ export const projectileVertexShader = `
 
     vViewLight = normalize((viewMatrix * vec4(uLightDirection, 0.0)).xyz);
     vUv = uv;
+    vColor = aColor;
     gl_Position = projectionMatrix * viewPosition;
   }
 `
 
 export const projectileFragmentShader = `
-  uniform vec3 uInkColor;
   varying vec2 vUv;
   varying vec3 vViewLight;
+  varying vec3 vColor;
   void main() {
     // Reconstruct a hemisphere normal across the quad so the flat billboard
     // shades as a solid ball.
@@ -363,7 +466,7 @@ export const projectileFragmentShader = `
     vec3 normal = vec3(offset, sqrt(1.0 - radial));
 
     float lambert = max(0.0, dot(normal, vViewLight));
-    vec3 color = uInkColor * (0.70 + 0.42 * lambert);
+    vec3 color = vColor * (0.70 + 0.42 * lambert);
 
     vec3 view = vec3(0.0, 0.0, 1.0);
     vec3 halfway = normalize(vViewLight + view);

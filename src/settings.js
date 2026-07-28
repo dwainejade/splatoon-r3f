@@ -20,18 +20,18 @@ export const RUN = {
 export const PLAYER = {
   moveSpeed: 7,          // m/s on the ground
   eyeHeight: 1.7,
-  fieldOfView: 60,       // vertical, degrees
+  fieldOfView: 50,       // vertical, degrees
   spawn: [0, 1.7, 15],
   // How far from the centre the player may walk, in metres. Keep inside
   // ARENA.floorSize / 2 or you can walk off the edge of the floor.
-  arenaLimit: 19,
+  arenaLimit: 20,
 }
 
 export const INK = {
   capacity: 100,
   // Refill rate. Fire rate costs WEAPONS.standard.inkCost every fireInterval,
   // so at the defaults spraying drains roughly 20/s against this 16.7/s refill.
-  rechargePerSecond: 16.7,
+  rechargePerSecond: 25.0,
 }
 
 // ---------------------------------------------------------------------------
@@ -54,6 +54,7 @@ export const INK = {
 export const WEAPONS = {
   standard: {
     name: 'Standard',
+    inkColor: '#3c6dff',
 
     // --- Ballistics. At these values a level shot from eye height reaches ~14m.
     muzzleSpeed: 60,       // m/s at the muzzle
@@ -86,7 +87,77 @@ export const WEAPONS = {
     chargeInkCost: 18,
     chargeSpread: 0.008,
   },
+
+  // Close-range wall tool. One pull throws a whole cone of small pellets, so it
+  // covers a broad patch instantly — but the heavy gravity means it is spent by
+  // about 9m and useless across the arena.
+  shotgun: {
+    name: 'Scatter',
+    inkColor: '#ff5c3c',
+
+    pellets: 30,            // projectiles per trigger pull
+    muzzleSpeed: 50,
+    gravity: 42,           // steep drop; range dies at roughly 9m
+    lifetime: .3,
+    spread: 0.25,          // wide cone — this is what makes it a shotgun
+
+    fireInterval: 0.5,     // pump action, not automatic
+    inkCost: 9,            // charged per pull, not per pellet
+
+    // Each pellet is small; the coverage comes from the pattern, not the splat.
+    radius: 0.72,
+    radiusPerMetre: 0.05,
+    maxRadius: 0.9,
+    maxStretch: 3.2,
+
+    // Nine balls leave the muzzle together, so each has to stay small and grow
+    // in over a decent distance or the blast whites out the screen.
+    projectileRadiusScale: 0.05,
+    emergenceDistance: 1.6,
+
+    chargeSpeedScale: 0.1,
+    chargeRadiusScale: 0.2,
+    chargeInkCost: 40,
+    chargeSpread: 0.18,
+  },
+
+  // Floor tool. A fast, heavy stream that arcs down within a few metres — you
+  // walk it across the ground like a hose. Enormously thirsty: it drains the
+  // tank in about seven seconds of continuous fire.
+  hose: {
+    name: 'Hose',
+    inkColor: '#3cffb0',
+
+    pellets: 2,
+    muzzleSpeed: 18,       // slow, so it falls quickly
+    gravity: 17,
+    lifetime: 1.2,
+    spread: 0.02,
+
+    fireInterval: 0.025,   // ~22/s, which reads as a continuous stream
+    inkCost: 1.2,          // ~31/s against a 16.7/s refill
+
+    radius: .8,
+    radiusPerMetre: 0.2,
+    maxRadius: 2.3,
+    // Shallow floor hits smear into a long band, which is the point of it.
+    maxStretch: 40.5,
+
+    // The hose is the worst case for this: slow rounds at 22/s means something
+    // is always near the muzzle. Small droplets growing in over a third of the
+    // weapon's range read as a stream instead of a wall of blobs.
+    projectileRadiusScale: 0.22,
+    emergenceDistance: 1.8,
+
+    chargeSpeedScale: 0.4,
+    chargeRadiusScale: 0.6,
+    chargeInkCost: 14,
+    chargeSpread: 0.02,
+  },
 }
+
+// Order of the weapon slots, selected with the number keys.
+export const WEAPON_ORDER = ['standard', 'shotgun', 'hose']
 
 export const DEFAULT_WEAPON = WEAPONS.standard
 
@@ -103,14 +174,25 @@ export const DROPLET_CAPACITY = 192
 // ---------------------------------------------------------------------------
 
 export const PAINT = {
-  color: '#ffb73c',
+  // Fallback ink colour: what an unpainted surface's colour mask clears to,
+  // and what droplets use before a weapon's own inkColor is known. Each
+  // weapon in WEAPONS carries its own inkColor for what actually gets stamped.
+  color: '#3c6dff',
 
   // --- Look
   // How strongly the ink's height gradient bends the surface normal. Higher
   // domes the paint; too high and splats read as balloons rather than liquid.
   bulge: 1.4,
-  // Multiplier on the specular highlight, which is what makes it read as wet.
+  // Multiplier on the specular highlight — the tight sun glint.
   specular: 1,
+  // How much of the sky the wet ink mirrors back. This is the broad, shaped
+  // reflection rather than the point highlight, and it is what actually makes
+  // paint look like a liquid surface rather than a coloured one.
+  reflection: 0.9,
+  // Width the skybox is blurred down to for that reflection. Small on purpose:
+  // downsampling this hard *is* the blur, and glossy paint wants a soft
+  // reflection, not a mirror. 96 costs about 70KB.
+  reflectionWidth: 96,
   // How far the splat outline wobbles with angle. 0 is a plain circle; past
   // ~0.4 splats start reading as starfish rather than poured blobs.
   lobeAmount: 0.26,
@@ -130,41 +212,100 @@ export const PAINT = {
   shedLifetime: 4,       // s before a drop that hits nothing gives up
 
 
+  // Skyboxes are downsampled to at most this width before upload, so dropping
+  // an oversized .hdr into a level cannot blow the VRAM budget. Cost is
+  // width * height * 16 bytes: 2048 wide is 33MB, 4096 wide is 134MB — and the
+  // latter, on top of the paint masks, is enough to lose the WebGL context.
+  // A 2K source at 2048 is not resampled at all.
+  skyboxMaxWidth: 2048,
+
   // --- Mask resolution. Higher is crisper paint and more GPU memory; each
   // surface gets two masks at the size this implies, clamped to 256..1024.
   texelsPerMetre: 26,
 }
 
 // ---------------------------------------------------------------------------
-// Arena
+// Levels
+//
+// Each level is a self-contained arena: its own skybox, palette, layout, sun
+// and fog. Add an entry, point ACTIVE_LEVEL at it, and that is a new level.
+//
+// `skybox` is a path under public/ to an equirectangular .hdr. Set it to null
+// to fall back to the procedural gradient sky instead.
+//
+// A note on palette: ink is drawn over `floorColor`, and the renderer's ACES
+// tone mapping desaturates bright saturated colours. A pale floor and a bright
+// ink therefore converge and the paint stops reading. Keep a clear value gap
+// between `floorColor` and `PAINT.color` — a light floor wants a deep ink, a
+// dark floor wants a bright one.
 // ---------------------------------------------------------------------------
 
-export const ARENA = {
-  floorSize: 42,
-  floorColor: '#3d4460',
-  // Blocks alternate between these two.
-  blockColors: ['#47577d', '#6f577e'],
-  // [centreX, centreY, centreZ, width, height, depth] in metres. centreY is
-  // half the height if you want a block sitting on the floor.
-  blocks: [
-    [-11, 1.5, -8, 4, 3, 2],
-    [8, 2, -10, 3, 4, 3],
-    [-7, 1, 7, 5, 2, 2],
-    [10, 1, 8, 3, 2, 5],
-    [0, 3, 0, 3, 6, 3],
-    [-15, 2, 8, 2, 4, 2],
-  ],
+export const LEVELS = [
+  {
+    name: 'Dust Yard',
+    skybox: '/assets/sky/skybox_2k.hdr',
 
-  // Direction of the sun, also used to place the sky and to light the ink.
-  lightDirection: [10, 18, 8],
-  ambientIntensity: 0.45,
-  sunIntensity: 2.4,
+    floorSize: 42,
+    floorColor: '#e7e6bc',
+    // Blocks alternate between these two.
+    blockColors: ['#d0d6e5', '#b6abbd'],
+    // [centreX, centreY, centreZ, width, height, depth] in metres. centreY is
+    // half the height if you want a block sitting on the floor.
+    blocks: [
+      [-11, 1.5, -8, 4, 3, 2],
+      [8, 2, -10, 3, 4, 3],
+      [-7, 1, 7, 5, 2, 2],
+      [10, 1, 8, 3, 2, 5],
+      [0, 3, 0, 3, 6, 3],
+      [-15, 2, 8, 2, 4, 2],
+    ],
 
-  backgroundColor: '#161a2b',
-  fogColor: '#161a2b',
-  fogNear: 22,
-  fogFar: 56,
-}
+    // Direction of the sun, also used to place the fallback sky and light the ink.
+    lightDirection: [10, 20, 8],
+    ambientIntensity: 0.4,
+    sunIntensity: 2.2,
+
+    // Only used when `skybox` is null; an HDR paints its own background.
+    backgroundColor: '#161a2b',
+    // Fog should sit near the horizon colour of the skybox or the arena edge
+    // reads as a hard cut against it.
+    fogColor: '#dcd9c4',
+    fogNear: 26,
+    fogFar: 95,
+  },
+
+  {
+    name: 'Night Lot',
+    skybox: null,
+
+    floorSize: 42,
+    floorColor: '#3d4460',
+    blockColors: ['#47577d', '#6f577e'],
+    blocks: [
+      [-9, 2, -9, 5, 4, 5],
+      [9, 1.5, -9, 4, 3, 4],
+      [0, 3.5, 0, 4, 7, 4],
+      [-12, 1, 6, 6, 2, 3],
+      [11, 2.5, 7, 3, 5, 3],
+      [0, 1, 14, 8, 2, 2],
+    ],
+
+    lightDirection: [10, 18, 8],
+    ambientIntensity: 0.45,
+    sunIntensity: 2.4,
+
+    backgroundColor: '#161a2b',
+    fogColor: '#161a2b',
+    fogNear: 22,
+    fogFar: 56,
+  },
+]
+
+// Which level to load. Everything else reads through ARENA, so this is the only
+// line that has to change to switch arenas.
+export const ACTIVE_LEVEL = 0
+
+export const ARENA = LEVELS[ACTIVE_LEVEL]
 
 // ---------------------------------------------------------------------------
 // Scoring
