@@ -10,12 +10,15 @@ import { PROJECTILE_CAPACITY } from "../settings.js";
 // its reach, its arc, and a splat whose size depends on how far the ink flew.
 export default function InkWeapon({
   weapon,
+  weaponKey,
+  inkColor,
   paintEnabled,
   ink,
   surfaces,
   paint,
   onInkUse,
   onSync,
+  network,
 }) {
   const { camera, gl, clock } = useThree();
   const held = useRef(false);
@@ -94,15 +97,35 @@ export default function InkWeapon({
         shot.visualRadius = 0;
         shot.distance = 0;
         shot.age = 0;
-        shot.color.set(weapon.inkColor);
+        // The player's own colour, once the network has assigned one, always
+        // wins over the weapon's default — ink identifies who painted it, not
+        // which tool they were holding.
+        shot.color.set(inkColor ?? weapon.inkColor);
         launched += 1;
       }
 
       if (launched === 0) return false;
       onInkUse(inkCost);
+
+      // Sent once per pull, not per projectile: every other client spawns
+      // and simulates its own copy of the whole pattern (all pellets) from
+      // this single origin/aim, using the same deterministic ballistics
+      // table looked up by weaponKey. Purely cosmetic — the actual paint
+      // outcome still comes from the splat broadcast once a shot lands.
+      network?.sendFire({
+        weaponKey,
+        charge,
+        ox: camera.position.x,
+        oy: camera.position.y,
+        oz: camera.position.z,
+        dx: scratch.aim.x,
+        dy: scratch.aim.y,
+        dz: scratch.aim.z,
+      });
+
       return true;
     },
-    [camera, ink, onInkUse, paintEnabled, projectiles, scratch, weapon],
+    [camera, ink, inkColor, network, onInkUse, paintEnabled, projectiles, scratch, weapon, weaponKey],
   );
 
   // The pointer listeners are attached once and reach the current shot function

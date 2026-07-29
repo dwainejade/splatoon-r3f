@@ -7,12 +7,14 @@ import InkDroplets from "./InkDroplets.jsx";
 import InkProjectiles from "./InkProjectiles.jsx";
 import InkWeapon from "./InkWeapon.jsx";
 import Player from "./Player.jsx";
+import RemotePlayers from "./RemotePlayers.jsx";
+import RemoteProjectiles from "./RemoteProjectiles.jsx";
 
 // The 3D half of the game. Holds no game state of its own — it wires the
 // simulation components to each other and to the callbacks App passes down.
 export default function World({
-  runId,
   weapon,
+  weaponKey,
   paintEnabled,
   ink,
   surfaces,
@@ -20,8 +22,11 @@ export default function World({
   onInkUse,
   onCoverage,
   registerSurface,
+  network,
+  localColor,
 }) {
   const projectiles = useRef();
+  const remoteProjectiles = useRef();
   const droplets = useRef();
 
   const sync = useCallback((shots) => projectiles.current?.sync(shots), []);
@@ -42,21 +47,39 @@ export default function World({
       <fog attach="fog" args={[ARENA.fogColor, ARENA.fogNear, ARENA.fogFar]} />
 
       <Player />
+      {network && <RemotePlayers network={network} />}
       <InkProjectiles ref={projectiles} />
       <InkDroplets ref={droplets} surfaces={surfaces} paint={paint} />
       <InkWeapon
         weapon={weapon}
+        weaponKey={weaponKey}
+        inkColor={localColor}
         paintEnabled={paintEnabled}
         ink={ink}
         surfaces={surfaces}
         paint={paint}
         onInkUse={onInkUse}
         onSync={sync}
+        network={network}
       />
 
-      {/* Keyed on the run so a restart rebuilds every paint mask from scratch. */}
+      {/* The visible ink balls other players are firing right now — cosmetic
+          only, rendered through its own instanced pool so a busy room can't
+          starve the local player's own shots of a slot in PROJECTILE_CAPACITY. */}
+      {network && (
+        <>
+          <InkProjectiles ref={remoteProjectiles} />
+          <RemoteProjectiles
+            network={network}
+            renderer={remoteProjectiles}
+            surfaces={surfaces}
+          />
+        </>
+      )}
+
+      {/* Mounted once for the session: in a shared room, remounting would
+          wipe every connected player's ink out from under them. */}
       <Arena
-        key={runId}
         onCoverage={onCoverage}
         onSpray={spray}
         registerSurface={registerSurface}
