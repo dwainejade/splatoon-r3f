@@ -1,13 +1,7 @@
 import { INK, WEAPON_ORDER } from "../settings.js";
 
-function formatClock(seconds) {
-  const minutes = String(Math.floor(seconds / 60)).padStart(2, "0");
-  const remainder = String(seconds % 60).padStart(2, "0");
-  return `${minutes}:${remainder}`;
-}
-
 // Presentational only — every value it shows is passed in.
-export default function Hud({ remaining, painted, ink, weapon, slot }) {
+export default function Hud({ painted, ink, weapon, slot, playerCount }) {
   return (
     <>
       <div className="hud">
@@ -15,7 +9,7 @@ export default function Hud({ remaining, painted, ink, weapon, slot }) {
           INK RUSH <span>prototype</span>
         </div>
 
-        <div className="timer">{formatClock(remaining)}</div>
+        <div className="timer">{playerCount} online</div>
 
         {/* aria-live off: this updates several times a second and would flood
             a screen reader with no useful information. */}

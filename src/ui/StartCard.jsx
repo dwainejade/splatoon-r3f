@@ -1,19 +1,11 @@
-// Shown before the first run and again once the clock hits zero, where it
-// doubles as the score screen.
-export default function StartCard({ finished, painted, onStart }) {
+// Shown once, before the player has joined the room. Its only real job is the
+// click a browser requires before it will grant pointer lock.
+export default function StartCard({ onStart }) {
   return (
     <section className="start-card">
-      {finished ? (
-        <p>
-          Run complete — you covered <strong>{painted.toFixed(1)}%</strong>.
-        </p>
-      ) : (
-        <p>A first-person paint time attack.</p>
-      )}
+      <p>A shared first-person paint sandbox.</p>
 
-      <button onClick={onStart}>
-        {finished ? "Run it again" : "Start 3-minute run"}
-      </button>
+      <button onClick={onStart}>Join</button>
 
       <small>
         Click the arena to look around · WASD to move · Hold left click to spray

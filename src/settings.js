@@ -9,12 +9,24 @@
 //   PAINT    how ink looks and behaves once it lands
 //   ARENA    layout, colours, lighting, fog
 //   SCORING  how coverage is sampled
+//   NETWORK  multiplayer relay connection
 //
 // Units are metres, seconds, and degrees unless noted.
 // ---------------------------------------------------------------------------
 
 export const RUN = {
   seconds: 180,
+}
+
+export const NETWORK = {
+  // The relay server started with `npm run server`. Point this at a LAN IP
+  // (e.g. ws://192.168.1.20:8787) to play with others on the same network.
+  url: 'ws://localhost:8787',
+  // How often the local player's transform is sent, in seconds. Remote
+  // players are interpolated between packets (see RemotePlayers.jsx), so this
+  // mainly trades bandwidth against how stale the interpolation window gets.
+  stateSendInterval: 0.066,
+  reconnectDelay: 1500,
 }
 
 export const PLAYER = {
@@ -25,6 +37,9 @@ export const PLAYER = {
   // How far from the centre the player may walk, in metres. Keep inside
   // ARENA.floorSize / 2 or you can walk off the edge of the floor.
   arenaLimit: 20,
+
+  jumpSpeed: 6,          // m/s of upward velocity on takeoff
+  gravity: 18,           // m/s² pulling the player back down
 }
 
 export const INK = {
